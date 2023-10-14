@@ -4,6 +4,12 @@
 #include <stdlib.h>
 
 
+struct vector_posiciones{
+	void** vector;
+	size_t tope;
+	size_t posicion;
+};
+
 nodo_abb_t *nodo_crear(void *elemento){
 	nodo_abb_t *nuevo_nodo = calloc(1, sizeof(nodo_abb_t));
 	if(!nuevo_nodo){
@@ -16,6 +22,10 @@ nodo_abb_t *nodo_crear(void *elemento){
 }
 
 nodo_abb_t *insertar_rec(nodo_abb_t* nodo_actual, nodo_abb_t* nodo_nuevo, abb_comparador comparador){
+	if(!nodo_nuevo){
+		return NULL;
+	}
+	
 	if(!nodo_actual){
 		return nodo_nuevo;
 	}
@@ -26,6 +36,57 @@ nodo_abb_t *insertar_rec(nodo_abb_t* nodo_actual, nodo_abb_t* nodo_nuevo, abb_co
 
 	else{
 		nodo_actual->derecha = insertar_rec(nodo_actual->derecha, nodo_nuevo, comparador);
+	}
+
+	return nodo_actual;
+}
+
+nodo_abb_t* extraer_elemento_mas_derecho(nodo_abb_t* nodo_actual, void** elemento_extraido){
+	if(nodo_actual->derecha == NULL){
+		*elemento_extraido = nodo_actual->elemento;
+		nodo_abb_t* izquierdo = nodo_actual->izquierda;
+		free(nodo_actual);
+		return izquierdo;
+	}
+
+	nodo_actual->derecha = extraer_elemento_mas_derecho(nodo_actual->derecha, elemento_extraido);
+	return nodo_actual;
+}
+
+void* quitar_rec(abb_t *arbol, nodo_abb_t *nodo_actual, void* elemento, abb_comparador comparador, void** extraido){
+	if(!nodo_actual){
+		return NULL;
+	}
+
+	int comparacion = comparador(elemento, nodo_actual->elemento);
+
+	if(comparacion == 0){
+		nodo_abb_t *izquierdo = nodo_actual->izquierda;
+		nodo_abb_t *derecho = nodo_actual->derecha;
+		*extraido = nodo_actual->elemento;
+		arbol->tamanio--;
+
+		if(izquierdo != NULL && derecho != NULL){
+			void* elemento_derecho = NULL;
+			nodo_actual->izquierda = extraer_elemento_mas_derecho(nodo_actual->izquierda, &elemento_derecho);
+
+			nodo_actual->elemento = elemento_derecho;
+			return nodo_actual;
+		}
+		else{
+			free(nodo_actual);
+			if(izquierdo == NULL){
+				return derecho;
+			}
+			return izquierdo;
+		}
+	}
+
+	else if(comparacion < 0){
+		nodo_actual->izquierda = quitar_rec(arbol, nodo_actual->izquierda, elemento, comparador, extraido);
+	}
+	else{
+		nodo_actual->derecha = quitar_rec(arbol, nodo_actual->derecha, elemento, comparador, extraido);
 	}
 
 	return nodo_actual;
@@ -84,6 +145,18 @@ bool con_cada_elemento_postorden(nodo_abb_t* nodo_actual, bool (*funcion)(void*,
 
 	(*contador)++;
 	return funcion(nodo_actual->elemento, aux);
+}
+
+bool rellenar_vector(void* elemento, void* vec){
+	struct vector_posiciones *vp = vec;
+	if(vp->posicion >= vp->tope){
+		return false;
+	}
+
+	vp->vector[vp->posicion] = elemento;
+	vp->posicion++;
+
+	return true;
 }
 
 void destruir_todo_rec(abb_t *arbol, void (*destructor)(void *), nodo_abb_t *nodo_actual){
@@ -147,7 +220,14 @@ abb_t *abb_insertar(abb_t *arbol, void *elemento)
 
 void *abb_quitar(abb_t *arbol, void *elemento)
 {
-	return elemento;
+	if(!arbol || arbol->tamanio == 0){
+		return NULL;
+	}
+
+	void* extraido = NULL;
+
+	arbol->nodo_raiz = quitar_rec(arbol, arbol->nodo_raiz, elemento, arbol->comparador, &extraido);
+	return extraido;
 }
 
 void *abb_buscar(abb_t *arbol, void *elemento)
@@ -179,7 +259,11 @@ void *abb_buscar(abb_t *arbol, void *elemento)
 
 bool abb_vacio(abb_t *arbol)
 {
-	if(arbol->tamanio != 0 || !arbol){
+	if(!arbol){
+		return true;
+	}
+
+	if(arbol->tamanio != 0){
 		return false;
 	}
 	return true;
@@ -241,5 +325,16 @@ size_t abb_con_cada_elemento(abb_t *arbol, abb_recorrido recorrido,
 size_t abb_recorrer(abb_t *arbol, abb_recorrido recorrido, void **array,
 		    size_t tamanio_array)
 {
-	return 0;
+	if(!arbol || !array){
+		return 0;
+	}
+
+	struct vector_posiciones vector_a_llenar;
+	vector_a_llenar.vector = array;
+	vector_a_llenar.posicion = 0;
+	vector_a_llenar.tope = tamanio_array;
+
+	abb_con_cada_elemento(arbol, recorrido, rellenar_vector, &vector_a_llenar);
+
+	return vector_a_llenar.posicion;
 }
